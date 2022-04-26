@@ -391,6 +391,11 @@ void parseArgs(int argc, char *const argv[], Args &arg)
       exit(1);
     }
   }
+  // the only input parameter is the file name
+  if (argc == 1)
+  {
+    error("Invalid number of arguments\n", usage);
+  }
 }
 
 //********** end argument options ********************
