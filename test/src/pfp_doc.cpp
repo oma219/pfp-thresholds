@@ -16,7 +16,34 @@
 #include <string>
 #include <unistd.h>
 #include <filesystem>
+#include <ref_builder.hpp>
+#include <vector>
 
+
+bool endsWith(const std::string& str, const std::string& suffix) {
+    // Checks if the string ends the suffix
+    return str.size() >= suffix.size() && 0 == str.compare(str.size()-suffix.size(), suffix.size(), suffix);
+}
+
+bool is_integer(const std::string& str) {
+    /* Checks if string passed is an integer */
+    std::string::const_iterator iter = str.begin();
+    while (iter != str.end() && std::isdigit(*iter)) {++iter;}
+    return !str.empty() && iter == str.end();
+}
+
+std::vector<std::string> split(std::string input, char delim) {
+    /* Takes in a string, and splits it based on delimiters */
+    std::vector<std::string> word_list;
+    std::string curr_word = "";
+
+    for (char ch: input) {
+        if (ch == delim && curr_word.length()) {word_list.push_back(curr_word); curr_word = "";}
+        else if (ch != delim) {curr_word += ch;}
+    }
+    if (curr_word.length()) {word_list.push_back(curr_word);}
+    return word_list;
+}
 
 int is_file(std::string path) {
     /* Checks if the path is a valid file-path */
@@ -67,7 +94,12 @@ int build_main(int argc, char** argv) {
     build_opts.output_ref.assign(build_opts.output_prefix + ".fna");
 
     // print out information 
-    print_build_status_info(&build_opts); 
+    print_build_status_info(&build_opts);
+
+    // Build the input reference file, and determine how large each class is
+    RefBuilder ref_build(build_opts.input_list, build_opts.output_prefix);
+
+
 
     
 

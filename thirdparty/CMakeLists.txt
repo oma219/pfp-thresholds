@@ -1,5 +1,21 @@
 include(FetchContent)
 
+#----------------------------------------
+# Add zlib
+#----------------------------------------
+FetchContent_Declare(
+  zlib
+  GIT_REPOSITORY https://github.com/madler/zlib.git
+)
+
+FetchContent_GetProperties(zlib)
+if(NOT zlib_POPULATED)
+  FetchContent_Populate(zlib)
+  add_library(zlib INTERFACE)
+  #target_include_directories(zlib INTERFACE ${zlib_SOURCE_DIR})
+endif()
+
+
 ## Add malloc_count
 FetchContent_Declare(
   malloc_count

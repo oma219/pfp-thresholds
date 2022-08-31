@@ -12,10 +12,13 @@
 #include <string>
 #include <iostream>
 #include <filesystem>
+#include <vector>
 
 /* Useful MACROs */
-#define FATAL_ERROR(...) do {std::fprintf(stderr, "Error: "); std::fprintf(stderr, __VA_ARGS__);\
+#define FATAL_ERROR(...) do {std::fprintf(stderr, "\nError: "); std::fprintf(stderr, __VA_ARGS__);\
                               std::fprintf(stderr, "\n\n"); std::exit(1);} while(0)
+#define ASSERT(condition, msg) do {if (!condition){std::fprintf(stderr, "Assertion Failed: %s\n", msg); \
+                                                   std::exit(1);}} while(0)
 
 /* Function declations */
 int pfpdoc_usage();
@@ -24,6 +27,9 @@ int run_main(int argc, char** argv);
 int pfpdoc_build_usage();
 int is_file(std::string path);
 int is_dir(std::string path);
+std::vector<std::string> split(std::string input, char delim);
+bool is_integer(const std::string& str);
+bool endsWith(const std::string& str, const std::string& suffix);
 
 struct PFPDocBuildOptions {
     public:
