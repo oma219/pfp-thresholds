@@ -61,7 +61,7 @@ class PFPthresholds(threading.Thread):
       if args.m: command += " -m"
       
       print("==== Computing Thresholds. Command:", command)
-      if(execute_command(command,logfile,logfile_name)!=True):
+      if execute_command(command,logfile,logfile_name) != True:
         return
       print("Thresholds Elapsed time: {0:.4f}".format(time.time()-start));
 
@@ -198,28 +198,26 @@ def main(args):
       print("==== Done: Parsing output xz-compressed as requested")
       exit(0)
 
-    exit(0)
+    # Build data-strucutres based on the parse of input text    
     print("==== Step 2: Building data-structures based on PFP.")
-    pfpds_thread = PFPthresholds(name = "{}".format(args.input), args=args, counter=1)  # ...Instantiate a thread and pass a unique ID to it
-    pfpds_thread.start()                                       # ...Start the thread, invoke the run method
-    # bwt_thread = BWT(name = "{}".format(args.input), args=args, counter=2)  # ...Instantiate a thread and pass a unique ID to it
-    # bwt_thread.start()                                       # ...Start the thread, invoke the run method
-
+    pfpds_thread = PFPthresholds(name = "{}".format(args.input), args=args, counter=1)
+    
+    # Start the thread, which invokes the run method
+    pfpds_thread.start() 
     pfpds_thread.join()
+
+    # bwt_thread = BWT(name = "{}".format(args.input), args=args, counter=2)  # ...Instantiate a thread and pass a unique ID to it
+    # bwt_thread.start()   
     # bwt_thread.join()
 
-    print("Total construction time: {0:.4f}".format(time.time()-start0))
-    # ---- print elapsed time to file
+    print("Total construction time: {0:.4f}\n".format(time.time()-start0))
+    
+    # Write elapsed time to log file, remove intermediate files 
     command = "echo Total construction time: {0:.4f}".format(time.time()-start0)
-    if(execute_command(command,logfile,logfile_name)!=True):
+    if execute_command(command,logfile,logfile_name) != True:
       return
 
-    # ---- delete intermediate files
     delete_temp_files(args,logfile,logfile_name)
-
-    # --- start checking ---
- 
-    # --- end checking ---
 
   print("==== Done")
 
