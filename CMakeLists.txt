@@ -64,3 +64,7 @@ configure_file(${PROJECT_SOURCE_DIR}/pipeline/pfp_thresholds ${PROJECT_BINARY_DI
 configure_file(${PROJECT_SOURCE_DIR}/pipeline/bwt_lcp_thresholds ${PROJECT_BINARY_DIR}/bwt_lcp_thresholds)
 configure_file(${PROJECT_SOURCE_DIR}/pipeline/pfp_lcp ${PROJECT_BINARY_DIR}/pfp_lcp)
 configure_file(${PROJECT_SOURCE_DIR}/pipeline/bwt_lcp ${PROJECT_BINARY_DIR}/bwt_lcp)
+
+install(TARGETS pfp_doc DESTINATION ${PROJECT_BINARY_DIR})
+install(TARGETS newscanNT.x pscan.x newscan.x 
+        DESTINATION ${PROJECT_BINARY_DIR}/bin)
