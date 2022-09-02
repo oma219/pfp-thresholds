@@ -51,13 +51,16 @@ public:
     uint8_t head; // character of current BWT run
     size_t length = 0; // length of the current BWT run
 
-    pfp_lcp(pf_parsing &pfp_, std::string filename, RefBuilder* ref_build) : 
+    bool rle; // run-length encode the BWT
+
+    pfp_lcp(pf_parsing &pfp_, std::string filename, RefBuilder* ref_build, bool rle_ = true) : 
                 pf(pfp_),
                 min_s(1, pf.n),
                 pos_s(1,0),
                 head(0),
                 num_docs(ref_build->num_docs),
-                ch_doc_counters(256, std::vector<size_t>(ref_build->num_docs, 0))
+                ch_doc_counters(256, std::vector<size_t>(ref_build->num_docs, 0)),
+                rle(rle_)
                 // heads(1, 0)
     {
         // Opening output files
@@ -73,10 +76,20 @@ public:
         if ((esa_file = fopen(outfile.c_str(), "w")) == nullptr)
             error("open() file " + outfile + " failed");
 
-        outfile = filename + std::string(".bwt");
-        if ((bwt_file = fopen(outfile.c_str(), "w")) == nullptr)
-            error("open() file " + outfile + " failed");
-        
+        if (rle) {
+            outfile = filename + std::string(".bwt.heads");
+            if ((bwt_file = fopen(outfile.c_str(), "w")) == nullptr)
+                error("open() file " + outfile + " failed");
+
+            outfile = filename + std::string(".bwt.len");
+            if ((bwt_file_len = fopen(outfile.c_str(), "w")) == nullptr)
+                error("open() file " + outfile + " failed");
+        } else {
+            outfile = filename + std::string(".bwt");
+            if ((bwt_file = fopen(outfile.c_str(), "w")) == nullptr)
+                error("open() file " + outfile + " failed");
+        }
+
         outfile = filename + std::string(".sdap");
         if ((sdap_file = fopen(outfile.c_str(), "w")) == nullptr)
             error("open() file " + outfile + " failed");
@@ -323,6 +336,9 @@ public:
         fclose(esa_file);
         fclose(bwt_file);
         fclose(lcp_file);
+
+        if (rle)
+            fclose(bwt_file_len);
     }
 
 private:
@@ -353,7 +369,8 @@ private:
     FILE *sdap_file; // start of document array profiles
     FILE *edap_file; // end of document array profiles
     FILE *lcp_file; // LCP array
-    FILE *bwt_file; // BWT
+    FILE *bwt_file; // BWT (run characters if using rle)
+    FILE *bwt_file_len; // lengths file is using rle
     FILE *ssa_file; // start of suffix array sample
     FILE *esa_file; // end of suffix array sample
 
@@ -516,10 +533,23 @@ private:
 
     inline void print_bwt()
     {   
-        for (size_t i = 0; i < length; ++i)
+        if (length > 0)
         {
-            if (fputc(head, bwt_file) == EOF)
-                error("BWT write error 1");
+            if (rle) {
+                // write the head character
+                if (fputc(head, bwt_file) == EOF)
+                    error("BWT write error 1");
+
+                // write the length of that run
+                if (fwrite(&length, BWTBYTES, 1, bwt_file_len) != 1)
+                    error("BWT write error 2");
+            } else {
+                for (size_t i = 0; i < length; ++i)
+                {
+                    if (fputc(head, bwt_file) == EOF)
+                        error("BWT write error 1");
+                }
+            }
         }
     }
 
