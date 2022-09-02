@@ -18,7 +18,98 @@
 #include <filesystem>
 #include <ref_builder.hpp>
 #include <vector>
+#include <pfp.hpp>
+#include <pfp_lcp_doc.hpp>
 
+int build_main(int argc, char** argv) {
+    /* main method for build the document profiles */
+    if (argc == 1) return pfpdoc_build_usage();
+
+    // grab the command-line options, and validate them
+    PFPDocBuildOptions build_opts;
+    parse_build_options(argc, argv, &build_opts);
+    build_opts.validate();
+
+    // determine output path for reference, and print all info
+    build_opts.output_ref.assign(build_opts.output_prefix + ".fna");
+    print_build_status_info(&build_opts);
+
+    // Build the input reference file, and bitvector labeling the end for each doc
+    RefBuilder ref_build(build_opts.input_list, build_opts.output_prefix, build_opts.use_rcomp);
+
+    // Determine the paths to the BigBWT executables
+    HelperPrograms helper_bins;
+    if (!std::getenv("PFPDOC_BUILD_DIR")) {FATAL_ERROR("Need to set PFPDOC_BUILD_DIR environment variable.");}
+    helper_bins.build_paths((std::string(std::getenv("PFPDOC_BUILD_DIR")) + "/bin/").data());
+    helper_bins.validate();
+
+    // Parse the input text with BigBWT, and load it into pf object
+    run_build_parse_cmd(&build_opts, &helper_bins);
+    pf_parsing pf(build_opts.output_ref, build_opts.pfp_w);
+
+    pfp_lcp lcp(pf, build_opts.output_ref, &ref_build);
+
+    return 0;
+}
+
+int run_main(int argc, char** argv) {
+    /* main method for querying the data-structure */
+    std::cerr << "Error: querying is not implemented yet." << std::endl;
+    return 0;
+}
+
+void run_build_parse_cmd(PFPDocBuildOptions* build_opts, HelperPrograms* helper_bins) {
+    // Generates and runs the command-line for executing the PFP of the reference 
+    std::ostringstream command_stream;
+    if (build_opts->threads > 0) {
+        std::string curr_exe = "";
+        if (build_opts->is_fasta) {curr_exe.assign(helper_bins->parse_fasta_bin);}
+        else {curr_exe.assign(helper_bins->parse_bin);}
+
+        command_stream << curr_exe << " "; //<< " -i ";
+        command_stream << build_opts->output_ref << " ";
+        command_stream << "-w " << build_opts->pfp_w;
+        command_stream << " -p " << build_opts->hash_mod;
+        command_stream << " -t " << build_opts->threads;
+    }
+    else {
+        std::string curr_exe = "";
+        command_stream << helper_bins->parseNT_bin << " "; // << " -i ";
+        command_stream << build_opts->output_ref << " ";
+        command_stream << "-w " << build_opts->pfp_w;
+        command_stream << " -p " << build_opts->hash_mod;
+    }
+    if (build_opts->is_fasta) {command_stream << " -f";}
+
+    //LOG(build_opts->verbose, "build_parse", ("Executing this command: " + command_stream.str()).data());
+    STATUS_LOG("build_parse", "generating the prefix-free parse for given reference");
+
+    auto start = std::chrono::system_clock::now();
+    auto parse_log = execute_cmd(command_stream.str().c_str());
+    DONE_LOG((std::chrono::system_clock::now() - start));
+    //OTHER_LOG(parse_log.data());
+}
+
+std::string execute_cmd(const char* cmd) {
+    std::array<char, 256> buffer{};
+    std::string output = "";
+
+    std::string cmd_plus_stderr = std::string(cmd) + " 2>&1";
+    FILE* pipe = popen(cmd_plus_stderr.data(), "r"); // Extract stderr as well
+    if (!pipe) {FATAL_ERROR("popen() failed!");}
+
+    try {
+        std::size_t bytes;
+        while ((bytes = fread(buffer.data(), sizeof(char), sizeof(buffer), pipe))) {
+            output += std::string(buffer.data(), bytes);
+        }
+    } catch (...) {
+        pclose(pipe);
+        FATAL_ERROR("Error occurred while reading popen() stream.");
+    }
+    pclose(pipe);
+    return output;
+}
 
 bool endsWith(const std::string& str, const std::string& suffix) {
     // Checks if the string ends the suffix
@@ -65,51 +156,22 @@ void print_build_status_info(PFPDocBuildOptions* opts) {
     std::fprintf(stdout, "\tInput file-list: %s\n", opts->input_list.data());
     std::fprintf(stdout, "\tOutput ref path: %s\n", opts->output_ref.data());
     std::fprintf(stdout, "\tPFP window size: %d\n", opts->pfp_w);
+    std::fprintf(stdout, "\tInclude rev-comp?: %d\n\n", opts->use_rcomp);
 }
 
 void parse_build_options(int argc, char** argv, PFPDocBuildOptions* opts) {
     /* parses the arguments for the build sub-command, and returns a struct with arguments */
     int c = 0;
-    while ((c = getopt(argc, argv, "hf:o:w:")) >= 0) {
+    while ((c = getopt(argc, argv, "hf:o:w:r")) >= 0) {
         switch(c) {
             case 'h': pfpdoc_build_usage(); std::exit(1);
             case 'f': opts->input_list.assign(optarg); break;
             case 'o': opts->output_prefix.assign(optarg); break;
             case 'w': opts->pfp_w = std::atoi(optarg); break;
+            case 'r': opts->use_rcomp = true; break;
             default: pfpdoc_build_usage(); std::exit(1);
         }
     }
-}
-
-int build_main(int argc, char** argv) {
-    /* main method for build the document profiles */
-    if (argc == 1) return pfpdoc_build_usage();
-
-    // grab the command-line options, and validate them
-    PFPDocBuildOptions build_opts;
-    parse_build_options(argc, argv, &build_opts);
-    build_opts.validate();
-
-    // determine output path for reference  
-    build_opts.output_ref.assign(build_opts.output_prefix + ".fna");
-
-    // print out information 
-    print_build_status_info(&build_opts);
-
-    // Build the input reference file, and determine how large each class is
-    RefBuilder ref_build(build_opts.input_list, build_opts.output_prefix);
-
-
-
-    
-
-    return 0;
-}
-
-int run_main(int argc, char** argv) {
-    /* main method for querying the data-structure */
-    std::cerr << "Error: querying is not implemented yet." << std::endl;
-    return 0;
 }
 
 int pfpdoc_build_usage() {
@@ -121,7 +183,8 @@ int pfpdoc_build_usage() {
     std::fprintf(stderr, "\t%-10sprints this usage message\n", "-h");
     std::fprintf(stderr, "\t%-10spath to a file-list of genomes to use\n", "-f [arg]");
     std::fprintf(stderr, "\t%-10soutput prefix path if using -f option\n", "-o [arg]");
-    std::fprintf(stderr, "\t%-10swindow size used for pfp (default: 10)\n\n", "-w [INT]");
+    std::fprintf(stderr, "\t%-10swindow size used for pfp (default: 10)\n", "-w [INT]");
+    std::fprintf(stderr, "\t%-10sinclude the reverse-complement of sequence (default: false)\n\n", "-r");
 
     return 0;
 }

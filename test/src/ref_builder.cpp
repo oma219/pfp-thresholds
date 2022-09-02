@@ -16,6 +16,8 @@
 #include <vector>
 #include <fstream>
 #include <stdio.h>
+#include <numeric>
+#include <sdsl/bit_vectors.hpp>
 
 KSEQ_INIT(int, read);
 
@@ -31,7 +33,8 @@ char comp_tab[] = {
 	'p', 'q', 'y', 's', 'a', 'a', 'b', 'w', 'x', 'r', 'z', 123, 124, 125, 126, 127
 };
 
-RefBuilder::RefBuilder(std::string input_data, std::string output_prefix): input_file(input_data) {
+RefBuilder::RefBuilder(std::string input_data, std::string output_prefix, 
+                        bool use_rcomp): input_file(input_data), use_revcomp(use_rcomp) {
     /* Constructor of RefBuilder - builds input reference and determines size of each class */
 
     // Verify every file in the filelist is valid
@@ -60,9 +63,9 @@ RefBuilder::RefBuilder(std::string input_data, std::string output_prefix): input
         if (member_num == 0 && std::stoi(word_list[1]) != 1) 
             FATAL_ERROR("The first ID in file_list must be 1");
             
-        if (std::stoi(word_list[1]) ==  curr_id || std::stoi(word_list[1]) == (curr_id+1)) {
-            if (std::stoi(word_list[1]) == (curr_id+1)) {curr_id+=1;}
-            document_ids.push_back(std::stoi(word_list[1]));
+        if (std::stoi(word_list[1]) ==  static_cast<int>(curr_id) || std::stoi(word_list[1]) == static_cast<int>(curr_id+1)) {
+            if (std::stoi(word_list[1]) == static_cast<int>(curr_id+1)) {curr_id+=1;}
+            document_ids.push_back(static_cast<size_t>(std::stoi(word_list[1])));
         } else
             FATAL_ERROR("The IDs in the file_list must be staying constant or increasing by 1.");
         member_num += 1;
@@ -84,16 +87,16 @@ RefBuilder::RefBuilder(std::string input_data, std::string output_prefix): input
     size_t curr_id_seq_length = 0;
     for (auto iter = input_files.begin(); iter != input_files.end(); ++iter) {
 
-        FILE* fp = fopen((*iter).data(), "r"); 
+        fp = fopen((*iter).data(), "r"); 
         if(fp == 0) {std::exit(1);}
 
         seq = kseq_init(fileno(fp));
-        size_t iter_index = iter-input_files.begin();
+        size_t iter_index = static_cast<size_t>(iter-input_files.begin());
 
         while (kseq_read(seq)>=0) {
             // Get forward seq, and write to file
 			for (size_t i = 0; i < seq->seq.l; ++i) {
-				seq->seq.s[i] = std::toupper(seq->seq.s[i]);
+				seq->seq.s[i] = static_cast<char>(std::toupper(seq->seq.s[i]));
             }
            
             output_fd << '>' << seq->name.s << '\n' << seq->seq.s << '\n';
@@ -102,20 +105,20 @@ RefBuilder::RefBuilder(std::string input_data, std::string output_prefix): input
             // Get reverse complement, and print it
             // Based on seqtk reverse complement code, that does it 
             // in place. (https://github.com/lh3/seqtk/blob/master/seqtk.c)
-            /*
-            int c0, c1;
-			for (size_t i = 0; i < seq->seq.l>>1; ++i) { // reverse complement sequence
-				c0 = comp_tab[(int)seq->seq.s[i]];
-				c1 = comp_tab[(int)seq->seq.s[seq->seq.l - 1 - i]];
-				seq->seq.s[i] = c1;
-				seq->seq.s[seq->seq.l - 1 - i] = c0;
-			}
-			if (seq->seq.l & 1) // complement the remaining base
-				seq->seq.s[seq->seq.l>>1] = comp_tab[(int)seq->seq.s[seq->seq.l>>1]];
+            if (use_revcomp) {
+                int c0, c1;
+                for (size_t i = 0; i < seq->seq.l>>1; ++i) { // reverse complement sequence
+                    c0 = comp_tab[(int)seq->seq.s[i]];
+                    c1 = comp_tab[(int)seq->seq.s[seq->seq.l - 1 - i]];
+                    seq->seq.s[i] = c1;
+                    seq->seq.s[seq->seq.l - 1 - i] = c0;
+                }
+                if (seq->seq.l & 1) // complement the remaining base
+                    seq->seq.s[seq->seq.l>>1] = comp_tab[static_cast<int>(seq->seq.s[seq->seq.l>>1])];
 
-            output_fd << '>' << seq->name.s << "_rev_comp" << '\n' << seq->seq.s << '\n';
-            curr_id_seq_length += seq->seq.l;
-            */
+                output_fd << '>' << seq->name.s << "_rev_comp" << '\n' << seq->seq.s << '\n';
+                curr_id_seq_length += seq->seq.l;
+            }
         }
         kseq_destroy(seq);
         fclose(fp);
@@ -131,4 +134,22 @@ RefBuilder::RefBuilder(std::string input_data, std::string output_prefix): input
         }
     }
     output_fd.close();
+
+    // Add 1 to last document for $ and find total length
+    size_t total_input_length = 0;
+    seq_lengths[seq_lengths.size()-1] += 1; // for $
+    total_input_length = std::accumulate(seq_lengths.begin(), seq_lengths.end(), 0);
+    
+    this->total_length = total_input_length;
+    this->num_docs = seq_lengths.size();
+
+    // Build bitvector/rank support marking the end of each document
+    doc_ends = sdsl::bit_vector(total_input_length, 0);
+    doc_ends_rank = sdsl::rank_support_v<1> (&doc_ends); 
+    size_t curr_sum = 0;
+
+    for (size_t i = 0; i < seq_lengths.size(); i++) {
+        curr_sum += seq_lengths[i];
+        doc_ends[curr_sum-1] = 1;
+    }
 }
