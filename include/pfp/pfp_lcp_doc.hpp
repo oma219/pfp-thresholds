@@ -91,12 +91,17 @@ public:
         }
 
         outfile = filename + std::string(".sdap");
-        if ((sdap_file = fopen(outfile.c_str(), "w")) == nullptr)
+        if ((sdap_file = fopen(outfile.c_str(), "w")) == nullptr) {
             error("open() file " + outfile + " failed");
+        }
+        if (fwrite(&ref_build->num_docs, sizeof(size_t), 1, sdap_file) != 1)
+            error("SDAP write error: number of documents");
 
         outfile = filename + std::string(".edap");
         if ((edap_file = fopen(outfile.c_str(), "w")) == nullptr)
             error("open() file " + outfile + " failed");
+        if (fwrite(&ref_build->num_docs, sizeof(size_t), 1, edap_file) != 1)
+            error("SDAP write error: number of documents");
 
         assert(pf.dict.d[pf.dict.saD[0]] == EndOfDict);
 
@@ -249,7 +254,7 @@ public:
                             {
                                 size_t start_pos = ref_build->num_docs * queue_pos;
                                 size_t curr_max_lcp = lcp_queue_profiles[start_pos + doc_of_LF_i];
-                                lcp_queue_profiles[start_pos + doc_of_LF_i] = max(curr_max_lcp, min_lcp+1);
+                                lcp_queue_profiles[start_pos + doc_of_LF_i] = std::max(curr_max_lcp, min_lcp+1);
                             }
                         }
                         
@@ -377,8 +382,9 @@ private:
     inline void print_doc_profiles() {
         /* Go through the leftover lcp queue, and print all the profiles for run boundaries */
         for (size_t i = 0; i < lcp_queue.size(); i++) {
-            bool is_start = lcp_queue[0].is_start;
-            bool is_end = lcp_queue[0].is_end;
+            uint8_t curr_ch = lcp_queue[i].bwt_ch;
+            bool is_start = lcp_queue[i].is_start;
+            bool is_end = lcp_queue[i].is_end;
 
             // remove the DA profile, and print if it's a boundary
             for (size_t j = 0; j < num_docs; j++) {

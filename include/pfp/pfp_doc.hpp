@@ -23,12 +23,16 @@
                                std::fprintf(stdout, " ... ");} while(0)
 #define DONE_LOG(x) do {auto sec = std::chrono::duration<double>(x); \
                         std::fprintf(stdout, "done.  (%.3f sec)\n", sec.count());} while(0)
+#define FORCE_LOG(func, ...)  do {std::fprintf(stdout, "[%s] ", func); \
+                                  std::fprintf(stdout, __VA_ARGS__); \
+                                  std::fprintf(stdout, "\n");} while (0)
 
 /* Function declations */
 int pfpdoc_usage();
 int build_main(int argc, char** argv);
 int run_main(int argc, char** argv);
 int pfpdoc_build_usage();
+int pfpdoc_run_usage();
 int is_file(std::string path);
 int is_dir(std::string path);
 std::vector<std::string> split(std::string input, char delim);
@@ -60,6 +64,26 @@ struct PFPDocBuildOptions {
         }
 };
 
+struct PFPDocRunOptions {
+    public:
+        std::string ref_file = "";
+        std::string pattern_file = "";
+    
+    void validate() {
+        /* checks arguments and makes sure they are valid files */
+        ref_file += ".fna";
+
+        // check the input files
+        if (!is_file(ref_file) || !is_file(pattern_file))
+            FATAL_ERROR("At least one of the input files is not valid.");
+
+        // check the index files
+        if (!is_file(ref_file + ".bwt.heads") || !is_file(ref_file + ".bwt.len")
+            || !is_file(ref_file + ".sdap") || !is_file(ref_file + ".edap"))
+            FATAL_ERROR("At least one of the index files is not present.");
+    }
+};
+
 struct HelperPrograms {
   /* Contains paths to run helper programs */
   std::string base_path = "";
@@ -85,6 +109,7 @@ public:
 
 /* Function Declartions involving structs */
 void parse_build_options(int argc, char** argv, PFPDocBuildOptions* opts);
+void parse_run_options(int argc, char** argv, PFPDocRunOptions* opts);
 void print_build_status_info(PFPDocBuildOptions* opts);
 void run_build_parse_cmd(PFPDocBuildOptions* build_opts, HelperPrograms* helper_bins);
 

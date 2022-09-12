@@ -20,6 +20,8 @@
 #include <vector>
 #include <pfp.hpp>
 #include <pfp_lcp_doc.hpp>
+#include <doc_queries.hpp>
+//#include <ms_pointers.hpp>
 
 int build_main(int argc, char** argv) {
     /* main method for build the document profiles */
@@ -47,14 +49,31 @@ int build_main(int argc, char** argv) {
     run_build_parse_cmd(&build_opts, &helper_bins);
     pf_parsing pf(build_opts.output_ref, build_opts.pfp_w);
 
+    // Builds the BWT, SA, LCP, and document array profiles and writes to a file
+    STATUS_LOG("build_main", "building bwt and doc profiles based on pfp");
+
+    auto start = std::chrono::system_clock::now();
     pfp_lcp lcp(pf, build_opts.output_ref, &ref_build);
+    DONE_LOG((std::chrono::system_clock::now() - start));
 
     return 0;
 }
 
 int run_main(int argc, char** argv) {
     /* main method for querying the data-structure */
-    std::cerr << "Error: querying is not implemented yet." << std::endl;
+    if (argc == 1) return pfpdoc_run_usage();
+
+    // grab the command-line options, and validate them
+    PFPDocRunOptions run_opts;
+    parse_run_options(argc, argv, &run_opts);
+    run_opts.validate();
+
+    std::cout << run_opts.ref_file << std::endl;
+    std::cout << run_opts.pattern_file << "\n" << std::endl;
+
+    // build the doc_queries object (load data-structures)
+    doc_queries doc_queries_obj (run_opts.ref_file);
+
     return 0;
 }
 
@@ -174,18 +193,44 @@ void parse_build_options(int argc, char** argv, PFPDocBuildOptions* opts) {
     }
 }
 
+void parse_run_options(int argc, char** argv, PFPDocRunOptions* opts) {
+    /* parses the arguments for the run sub-command, and returns struct */
+    int c = 0;
+    while ((c = getopt(argc, argv, "hr:p:")) >= 0) {
+        switch(c) {
+            case 'h': pfpdoc_run_usage(); std::exit(1);
+            case 'r': opts->ref_file.assign(optarg); break;
+            case 'p': opts->pattern_file.assign(optarg); break;
+            default: pfpdoc_run_usage(); std::exit(1);
+        }
+    }
+}
+
 int pfpdoc_build_usage() {
     /* prints out the usage information for the build method */
-    std::fprintf(stderr, "\npfp_doc build - builds the document array profiles using PFP.\n");
-    std::fprintf(stderr, "Usage: pfp_doc build [options]\n\n");
+    std::fprintf(stdout, "\npfp_doc build - builds the document array profiles using PFP.\n");
+    std::fprintf(stdout, "Usage: pfp_doc build [options]\n\n");
 
-    std::fprintf(stderr, "Options:\n");
-    std::fprintf(stderr, "\t%-10sprints this usage message\n", "-h");
-    std::fprintf(stderr, "\t%-10spath to a file-list of genomes to use\n", "-f [arg]");
-    std::fprintf(stderr, "\t%-10soutput prefix path if using -f option\n", "-o [arg]");
-    std::fprintf(stderr, "\t%-10swindow size used for pfp (default: 10)\n", "-w [INT]");
-    std::fprintf(stderr, "\t%-10sinclude the reverse-complement of sequence (default: false)\n\n", "-r");
+    std::fprintf(stdout, "Options:\n");
+    std::fprintf(stdout, "\t%-10sprints this usage message\n", "-h");
+    std::fprintf(stdout, "\t%-10spath to a file-list of genomes to use\n", "-f [arg]");
+    std::fprintf(stdout, "\t%-10soutput prefix path if using -f option\n", "-o [arg]");
+    std::fprintf(stdout, "\t%-10swindow size used for pfp (default: 10)\n", "-w [INT]");
+    std::fprintf(stdout, "\t%-10sinclude the reverse-complement of sequence (default: false)\n\n", "-r");
 
+    return 0;
+}
+
+int pfpdoc_run_usage() {
+    /* prints out the usage information for the run method */
+    std::fprintf(stdout, "\npfp_doc run - processes a set of reads using the document array profiles.\n");
+    std::fprintf(stdout, "Usage: pfp_doc run [options]\n\n");
+
+    std::fprintf(stdout, "Options:\n");
+    std::fprintf(stdout, "\t%-10sprints this usage message\n", "-h");
+    std::fprintf(stdout, "\t%-10spath to the input reference file\n", "-r [arg]");
+    std::fprintf(stdout, "\t%-10spath to the pattern file\n\n", "-p [arg]");
+    
     return 0;
 }
 

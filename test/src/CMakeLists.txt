@@ -1,7 +1,7 @@
 add_executable(pfp_doc pfp_doc.cpp ref_builder.cpp)
-target_link_libraries(pfp_doc common pfp gsacak sdsl)
-target_include_directories(pfp_doc PUBLIC "../../include/pfp/")
-target_compile_options(pfp_doc PUBLIC "-std=c++17" )
+target_link_libraries(pfp_doc common pfp gsacak sdsl ri)
+target_include_directories(pfp_doc PUBLIC "../../include/pfp/" "../../include/ms")
+target_compile_options(pfp_doc PUBLIC "-std=c++17")
 
 add_executable(pfp_thresholds pfp_thresholds.cpp)
 target_link_libraries(pfp_thresholds common pfp gsacak sdsl malloc_count)
