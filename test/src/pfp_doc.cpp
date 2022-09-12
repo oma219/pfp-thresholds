@@ -62,18 +62,24 @@ int build_main(int argc, char** argv) {
 int run_main(int argc, char** argv) {
     /* main method for querying the data-structure */
     if (argc == 1) return pfpdoc_run_usage();
+    std::cout << "\n";
 
     // grab the command-line options, and validate them
     PFPDocRunOptions run_opts;
     parse_run_options(argc, argv, &run_opts);
     run_opts.validate();
 
-    std::cout << run_opts.ref_file << std::endl;
-    std::cout << run_opts.pattern_file << "\n" << std::endl;
-
     // build the doc_queries object (load data-structures)
     doc_queries doc_queries_obj (run_opts.ref_file);
 
+    // query the doc_profiles with the given reads
+    STATUS_LOG("run_main", "processing the patterns");
+
+    auto start = std::chrono::system_clock::now();
+    doc_queries_obj.query_profiles(run_opts.pattern_file);
+    DONE_LOG((std::chrono::system_clock::now() - start));
+    std::cout << "\n";
+    
     return 0;
 }
 

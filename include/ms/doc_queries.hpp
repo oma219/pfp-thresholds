@@ -12,12 +12,12 @@
 //#include <common.hpp>
 //#include <malloc_count.h>
 
-
-
+#include <kseq.h>
 #include <sdsl/rmq_support.hpp>
 #include <sdsl/int_vector.hpp>
 #include <r_index.hpp>
 #include <ms_rle_string.hpp>
+#include <pfp_doc.hpp>
 
 template <class sparse_bv_type = ri::sparse_sd_vector,
           class rle_string_t = ms_rle_string_sd>
@@ -34,6 +34,9 @@ class doc_queries : ri::r_index<sparse_bv_type, rle_string_t>
     doc_queries(std::string filename, bool rle = true): ri::r_index<sparse_bv_type, rle_string_t>()
     {
         std::string bwt_fname = filename + ".bwt";
+
+        STATUS_LOG("build_profiles", "loading the bwt of the input text");
+        auto start = std::chrono::system_clock::now();
 
         if(rle)
         {
@@ -60,7 +63,7 @@ class doc_queries : ri::r_index<sparse_bv_type, rle_string_t>
 
             ifs.close();
         }
-        FORCE_LOG("build_doc_queries", "loaded the bwt of the input text");
+        DONE_LOG((std::chrono::system_clock::now() - start));
 
         // gather some statistics on the BWT
         this->r = this->bwt.number_of_runs();
@@ -68,8 +71,8 @@ class doc_queries : ri::r_index<sparse_bv_type, rle_string_t>
         size_t log_r = bitsize(uint64_t(this->r));
         size_t log_n = bitsize(uint64_t(this->bwt.size()));
 
-        FORCE_LOG("build_doc_queries", "bwt statistics: n = %d, r = %d" , this->bwt.size(), this->r);
-        
+        FORCE_LOG("build_profiles", "bwt statistics: n = %d, r = %d" , this->bwt.size(), this->r);
+
         /*
         for (size_t i = 0; i < this->bwt.size(); i++) {
             std::cout << " i = " << i << "   run # = " << this->bwt.run_of_position(i) << std::endl;
@@ -101,10 +104,13 @@ class doc_queries : ri::r_index<sparse_bv_type, rle_string_t>
         end_doc_profiles.resize(this->r, std::vector<size_t>(num_docs, 0));
 
         // load the profiles for starts and ends
+        STATUS_LOG("build_profiles", "loading the document array profiles");
+        start = std::chrono::system_clock::now();
+
         read_doc_profiles(start_doc_profiles, filename + ".sdap", this->num_docs);
         read_doc_profiles(end_doc_profiles, filename + ".edap", this->num_docs);
 
-        FORCE_LOG("build_doc_queries", "loaded the document array profiles");
+        DONE_LOG((std::chrono::system_clock::now() - start));
     }
 
     static void read_doc_profiles(std::vector<std::vector<size_t>>& prof_matrix, std::string input_file, size_t num_docs) {
@@ -137,6 +143,109 @@ class doc_queries : ri::r_index<sparse_bv_type, rle_string_t>
             }
         }
         fclose(fd);
+    }
+
+    void query_profiles(std::string pattern_file) {
+        /* Takes in a file of reads, and lists all the documents containing the read */
+
+        // Open output/input files
+        std::ofstream listings_fd (pattern_file + ".listings");
+
+        gzFile fp; kseq_t* seq;
+        fp = gzopen(pattern_file.data(), "r"); 
+
+        if(fp == 0) {std::exit(1);}
+        seq = kseq_init(fp);
+
+        // lambda to print out the document listing
+        auto process_profile = [&](std::vector<size_t> profile, size_t length) {
+                std::vector<size_t> docs_found;
+                listings_fd << "{";
+                for (size_t i = 0; i < profile.size(); i++)
+                    if (profile[i] >= length)
+                        listings_fd << i << ",";
+                listings_fd << '\b' << "}  ";
+        };
+
+        // Process each read, and print out the document lists
+        while (kseq_read(seq)>=0) {
+            
+            // Uppercase every character in read
+			for (size_t i = 0; i < seq->seq.l; ++i) {
+				seq->seq.s[i] = static_cast<char>(std::toupper(seq->seq.s[i]));
+            }
+
+            size_t start = 0, end = this->bwt.size(), end_pos_of_match = seq->seq.l-1;
+            std::vector<size_t> curr_profile (this->num_docs, 0);
+
+            for (int i = (seq->seq.l-1); i >= 0; i--) {
+                uint8_t next_ch = seq->seq.s[i];
+                //std::cout << next_ch << std::endl;
+                //std::cout << "start = " << start << ", end = " << end << std::endl;
+                if (this->bwt.run_of_position(start) != this->bwt.run_of_position(end-1)) 
+                {
+                    size_t num_ch_before_start = this->bwt.rank(start, next_ch); 
+                    size_t num_ch_before_end = this->bwt.rank(end, next_ch);
+
+                    //std::cout << "num_before_start = " << num_ch_before_start << ", num_before_end = " << num_ch_before_end << std::endl;
+                    // bwt range is empty, so will reset start and end
+                    if (num_ch_before_end == num_ch_before_start) {
+                        listings_fd << "(" << i << "," << end_pos_of_match << "] ";
+                        process_profile(curr_profile, (end_pos_of_match-i));
+                        end_pos_of_match = i;
+
+                        start = 0; end = this->bwt.size();
+                        num_ch_before_start = 0;
+                        num_ch_before_end = this->bwt.number_of_letter(next_ch);
+                    }
+
+                    // jump to last run boundary in the bwt range
+                    size_t pos_of_last_char = this->bwt.select(num_ch_before_end-1, next_ch);
+                    size_t run_of_last_char = this->bwt.run_of_position(pos_of_last_char);
+
+                    // grab the document array profile of the jumped to run boundary
+                    if (run_of_last_char != this->bwt.run_of_position(end-1))
+                        curr_profile = end_doc_profiles[run_of_last_char]; // makes copy
+                    else    
+                        curr_profile = start_doc_profiles[run_of_last_char];
+                } 
+                // range is within BWT run, but wrong character 
+                else if (this->bwt[start] != next_ch) 
+                {
+                    listings_fd << "(" << i << "," << end_pos_of_match << "] ";
+                    process_profile(curr_profile, (end_pos_of_match-i));
+                    end_pos_of_match = i;
+
+                    start = 0; end = this->bwt.size();
+                    size_t num_ch_before_start = 0;
+                    size_t num_ch_before_end = this->bwt.number_of_letter(next_ch);
+
+                    // jump to last run boundary in the bwt range
+                    size_t pos_of_last_char = this->bwt.select(num_ch_before_end-1, next_ch);
+                    size_t run_of_last_char = this->bwt.run_of_position(pos_of_last_char);
+
+                    // grab the document array profile of the jumped to run boundary
+                    if (run_of_last_char != this->bwt.run_of_position(end-1))
+                        curr_profile = end_doc_profiles[run_of_last_char]; // makes copy
+                    else    
+                        curr_profile = start_doc_profiles[run_of_last_char];
+                }
+                // range is within BWT run, and is the correct character
+                else 
+                {
+                    std::transform(curr_profile.begin(), curr_profile.end(), curr_profile.begin(), 
+                                    [](size_t x) { return (++x); });   
+                }
+
+                // Perform an LF step
+                start = LF(start, next_ch);
+                end = LF(end, next_ch);
+            }
+            listings_fd << "[" << 0 << "," << end_pos_of_match << "] ";
+            process_profile(curr_profile, end_pos_of_match);
+            listings_fd << "\n";
+        }
+
     }
 
     vector<ulint> build_F_(std::ifstream &heads, std::ifstream &lengths)
